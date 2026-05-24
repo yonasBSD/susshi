@@ -16,6 +16,8 @@ jobs:
     concurrency:
       group: release-plz-${{ github.ref }}
       cancel-in-progress: false
+    outputs:
+      releases_created: ${{ steps.release-plz.outputs.releases_created }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -29,6 +31,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run release-plz
+        id: release-plz
         uses: release-plz/action@v0.5
         env:
           # A PAT is required here (not GITHUB_TOKEN) so that the tag pushed by
@@ -36,3 +39,46 @@ jobs:
           # workflow events for actions performed by the built-in GITHUB_TOKEN.
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  update-pkgbuild:
+    name: Update PKGBUILD in repo
+    runs-on: ubuntu-latest
+    needs: release-plz
+    if: needs.release-plz.outputs.releases_created == 'true'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          ref: master
+
+      - name: Update PKGBUILD
+        run: bash scripts/update-pkgbuild.sh
+
+      - name: Regenerate .SRCINFO
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/pkg" \
+            -w /pkg \
+            archlinux:latest \
+            bash -c "
+              pacman -Sy --noconfirm base-devel > /dev/null 2>&1
+              useradd -m builder
+              chown -R builder:builder /pkg
+              su builder -s /bin/bash -c 'cd /pkg && makepkg --printsrcinfo > /pkg/.SRCINFO'
+            "
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add PKGBUILD .SRCINFO
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          VERSION=$(grep '^version' Cargo.toml | sed 's/version = "\(.*\)"/\1/' | head -1)
+          git commit -m "chore(release): update PKGBUILD to v${VERSION}"
+          git push
