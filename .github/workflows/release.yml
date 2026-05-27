@@ -267,3 +267,50 @@ jobs:
           file_glob: true
           tag: ${{ github.event.inputs.tag || github.ref }}
           overwrite: true
+
+  update-pkgbuild:
+    name: Update PKGBUILD in repo
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          ref: master
+
+      - name: Update PKGBUILD
+        run: bash scripts/update-pkgbuild.sh
+
+      - name: Regenerate .SRCINFO
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/pkg" \
+            -w /pkg \
+            archlinux:latest \
+            bash -c "
+              pacman -Sy --noconfirm base-devel > /dev/null 2>&1
+              useradd -m builder
+              chown -R builder:builder /pkg
+              su builder -s /bin/bash -c 'cd /pkg && makepkg --printsrcinfo > /pkg/.SRCINFO'
+            "
+
+      - name: Fix workspace permissions after Docker
+        run: sudo chown -R "$USER" .
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add PKGBUILD PKGBUILD.bin .SRCINFO
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          git commit -m "chore(release): update PKGBUILD to v${VERSION}"
+          git push
