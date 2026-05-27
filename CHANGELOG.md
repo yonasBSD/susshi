@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.15.11] — 2026-05-27
+
+### style
+
+- Corriger le formatage rustfmt des fichiers de test
+
+
 ## [0.15.10] — 2026-05-27
 
 ## [0.15.9] — 2026-05-24
