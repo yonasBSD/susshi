@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.15.12] — 2026-05-27
+
+### Fixed
+
+- Tag inheritance across hierarchy + 25 new tests + doc schema
+
+
 ## [0.15.11] — 2026-05-27
 
 ### style
