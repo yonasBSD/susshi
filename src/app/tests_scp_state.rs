@@ -345,7 +345,8 @@ fn poll_scp_events_file_size_updates_state() {
     let mut app = app_in_running(ScpDirection::Download);
     app.scp_rx = Some(rx);
 
-    tx.send(crate::ssh::sftp::ScpEvent::FileSize(1024 * 1024)).unwrap();
+    tx.send(crate::ssh::sftp::ScpEvent::FileSize(1024 * 1024))
+        .unwrap();
     drop(tx);
 
     app.poll_scp_events();
@@ -368,7 +369,10 @@ fn poll_scp_events_done_ok_transitions_to_done() {
 
     app.poll_scp_events();
 
-    assert!(matches!(app.scp_state, ScpState::Done { exit_ok: true, .. }));
+    assert!(matches!(
+        app.scp_state,
+        ScpState::Done { exit_ok: true, .. }
+    ));
     assert!(app.scp_rx.is_none());
 }
 
@@ -383,7 +387,10 @@ fn poll_scp_events_done_fail_transitions_to_done() {
 
     app.poll_scp_events();
 
-    assert!(matches!(app.scp_state, ScpState::Done { exit_ok: false, .. }));
+    assert!(matches!(
+        app.scp_state,
+        ScpState::Done { exit_ok: false, .. }
+    ));
 }
 
 #[test]
@@ -392,7 +399,10 @@ fn poll_scp_events_error_transitions_to_error() {
     let mut app = app_in_running(ScpDirection::Upload);
     app.scp_rx = Some(rx);
 
-    tx.send(crate::ssh::sftp::ScpEvent::Error("connection refused".to_string())).unwrap();
+    tx.send(crate::ssh::sftp::ScpEvent::Error(
+        "connection refused".to_string(),
+    ))
+    .unwrap();
     drop(tx);
 
     app.poll_scp_events();

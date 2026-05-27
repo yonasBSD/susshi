@@ -304,7 +304,8 @@ fn poll_wallix_selector_error_wallix_direct_sets_pending() {
         verbose: false,
     });
     app.wallix_selector_rx = Some(rx);
-    tx.send((server, Err("WALLIX_DIRECT_CONNECTION".to_string()))).unwrap();
+    tx.send((server, Err("WALLIX_DIRECT_CONNECTION".to_string())))
+        .unwrap();
 
     app.poll_wallix_selector();
 
@@ -329,12 +330,22 @@ fn poll_wallix_selector_error_ssh_auth_required_sets_credential_input() {
         verbose: false,
     });
     app.wallix_selector_rx = Some(rx);
-    tx.send((server, Err("SSH_AUTH_REQUIRED:Enter passphrase for key".to_string()))).unwrap();
+    tx.send((
+        server,
+        Err("SSH_AUTH_REQUIRED:Enter passphrase for key".to_string()),
+    ))
+    .unwrap();
 
     app.poll_wallix_selector();
 
     assert!(app.wallix_selector.is_none());
-    assert!(matches!(app.app_mode, AppMode::CredentialInput { is_passphrase: true, .. }));
+    assert!(matches!(
+        app.app_mode,
+        AppMode::CredentialInput {
+            is_passphrase: true,
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -350,11 +361,15 @@ fn poll_wallix_selector_generic_error_sets_error_state() {
     let server = wallix_test_server(None);
     let (tx, rx) = std::sync::mpsc::channel();
     app.wallix_selector_rx = Some(rx);
-    tx.send((server, Err("network timeout".to_string()))).unwrap();
+    tx.send((server, Err("network timeout".to_string())))
+        .unwrap();
 
     app.poll_wallix_selector();
 
-    assert!(matches!(app.wallix_selector, Some(WallixSelectorState::Error { .. })));
+    assert!(matches!(
+        app.wallix_selector,
+        Some(WallixSelectorState::Error { .. })
+    ));
 }
 
 #[test]
@@ -414,7 +429,10 @@ fn remember_wallix_selection_stores_id() {
     app.remember_wallix_selection(&server, "55");
 
     let key = App::server_key(&server);
-    assert_eq!(app.wallix_selection_cache.get(&key), Some(&"55".to_string()));
+    assert_eq!(
+        app.wallix_selection_cache.get(&key),
+        Some(&"55".to_string())
+    );
 }
 
 // ── wallix_selector_next / previous / selected_id ────────────────────────────
@@ -439,8 +457,16 @@ fn app_with_list_selector(entries: Vec<WallixMenuEntry>) -> App {
 #[test]
 fn wallix_selector_next_increments() {
     let entries = vec![
-        WallixMenuEntry { id: "1".into(), target: "T1".into(), group: "G1".into() },
-        WallixMenuEntry { id: "2".into(), target: "T2".into(), group: "G2".into() },
+        WallixMenuEntry {
+            id: "1".into(),
+            target: "T1".into(),
+            group: "G1".into(),
+        },
+        WallixMenuEntry {
+            id: "2".into(),
+            target: "T2".into(),
+            group: "G2".into(),
+        },
     ];
     let mut app = app_with_list_selector(entries);
     app.wallix_selector_next();
@@ -451,9 +477,11 @@ fn wallix_selector_next_increments() {
 
 #[test]
 fn wallix_selector_next_clamps_at_last() {
-    let entries = vec![
-        WallixMenuEntry { id: "1".into(), target: "T1".into(), group: "G1".into() },
-    ];
+    let entries = vec![WallixMenuEntry {
+        id: "1".into(),
+        target: "T1".into(),
+        group: "G1".into(),
+    }];
     let mut app = app_with_list_selector(entries);
     app.wallix_selector_next();
     app.wallix_selector_next();
@@ -465,8 +493,16 @@ fn wallix_selector_next_clamps_at_last() {
 #[test]
 fn wallix_selector_previous_decrements() {
     let entries = vec![
-        WallixMenuEntry { id: "1".into(), target: "T1".into(), group: "G1".into() },
-        WallixMenuEntry { id: "2".into(), target: "T2".into(), group: "G2".into() },
+        WallixMenuEntry {
+            id: "1".into(),
+            target: "T1".into(),
+            group: "G1".into(),
+        },
+        WallixMenuEntry {
+            id: "2".into(),
+            target: "T2".into(),
+            group: "G2".into(),
+        },
     ];
     let mut app = app_with_list_selector(entries);
     app.wallix_selector_next(); // → 1
@@ -478,9 +514,11 @@ fn wallix_selector_previous_decrements() {
 
 #[test]
 fn wallix_selector_previous_saturates_at_zero() {
-    let entries = vec![
-        WallixMenuEntry { id: "1".into(), target: "T1".into(), group: "G1".into() },
-    ];
+    let entries = vec![WallixMenuEntry {
+        id: "1".into(),
+        target: "T1".into(),
+        group: "G1".into(),
+    }];
     let mut app = app_with_list_selector(entries);
     app.wallix_selector_previous();
     if let Some(WallixSelectorState::List { selected, .. }) = &app.wallix_selector {
@@ -490,9 +528,11 @@ fn wallix_selector_previous_saturates_at_zero() {
 
 #[test]
 fn wallix_selector_selected_id_returns_entry() {
-    let entries = vec![
-        WallixMenuEntry { id: "42".into(), target: "T".into(), group: "G".into() },
-    ];
+    let entries = vec![WallixMenuEntry {
+        id: "42".into(),
+        target: "T".into(),
+        group: "G".into(),
+    }];
     let app = app_with_list_selector(entries);
     let result = app.wallix_selector_selected_id();
     assert!(result.is_some());
@@ -539,6 +579,9 @@ fn poll_wallix_selector_auto_select_false_opens_list() {
 
     app.poll_wallix_selector();
 
-    assert!(matches!(app.wallix_selector, Some(WallixSelectorState::List { .. })));
+    assert!(matches!(
+        app.wallix_selector,
+        Some(WallixSelectorState::List { .. })
+    ));
     assert!(app.take_pending_wallix_connection().is_none());
 }

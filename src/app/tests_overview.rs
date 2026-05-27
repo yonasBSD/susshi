@@ -232,7 +232,11 @@ fn poll_overview_delivers_ok_result() {
     let ov = app.overview.as_ref().unwrap();
     assert!(matches!(
         ov.entries[0].status,
-        OverviewStatus::Ok { ram_pct: 60, disk_pct: 40, .. }
+        OverviewStatus::Ok {
+            ram_pct: 60,
+            disk_pct: 40,
+            ..
+        }
     ));
 }
 

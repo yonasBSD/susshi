@@ -247,8 +247,13 @@ fn namespace_shown_when_has_favorite() {
     app.items_dirty = true;
 
     let items = app.get_visible_items();
-    let has_ns = items.iter().any(|i| matches!(i, ConfigItem::Namespace(n) if n == "CES"));
-    assert!(has_ns, "CES namespace should appear when it contains a favorite");
+    let has_ns = items
+        .iter()
+        .any(|i| matches!(i, ConfigItem::Namespace(n) if n == "CES"));
+    assert!(
+        has_ns,
+        "CES namespace should appear when it contains a favorite"
+    );
 }
 
 #[test]
@@ -275,7 +280,10 @@ fn group_hidden_when_no_favorites_inside_namespace() {
     let has_ces_group = items
         .iter()
         .any(|i| matches!(i, ConfigItem::Group(n, ns) if n == "CES_Group" && ns == "CES"));
-    assert!(!has_ces_group, "CES_Group should be hidden since it has no favorites");
+    assert!(
+        !has_ces_group,
+        "CES_Group should be hidden since it has no favorites"
+    );
 }
 
 // ── namespace + env + favorites ───────────────────────────────────────────────
@@ -293,12 +301,15 @@ fn namespace_env_favorite_shows_env_and_server() {
     // Expand everything.
     app.expanded_items.insert("NS:NS1".to_string());
     app.expanded_items.insert("NS:NS1:Group:GrpA".to_string());
-    app.expanded_items.insert("NS:NS1:Env:GrpA:EnvA".to_string());
+    app.expanded_items
+        .insert("NS:NS1:Env:GrpA:EnvA".to_string());
     app.items_dirty = true;
 
     let items = app.get_visible_items();
 
-    let has_server = items.iter().any(|i| matches!(i, ConfigItem::Server(s) if s.name == "ns_srv"));
+    let has_server = items
+        .iter()
+        .any(|i| matches!(i, ConfigItem::Server(s) if s.name == "ns_srv"));
     assert!(has_server, "ns_srv should be visible when favorited");
 }
 
@@ -468,8 +479,18 @@ fn sort_by_recent_orders_by_timestamp_descending() {
     let mut app = App::new(config, vec![], std::path::PathBuf::new(), vec![]).unwrap();
 
     // Give S1 a newer timestamp than S2.
-    let s1 = app.resolved_servers.iter().find(|s| s.name == "S1").cloned().unwrap();
-    let s2 = app.resolved_servers.iter().find(|s| s.name == "S2").cloned().unwrap();
+    let s1 = app
+        .resolved_servers
+        .iter()
+        .find(|s| s.name == "S1")
+        .cloned()
+        .unwrap();
+    let s2 = app
+        .resolved_servers
+        .iter()
+        .find(|s| s.name == "S2")
+        .cloned()
+        .unwrap();
     app.last_seen.insert(App::server_key(&s1), 2000);
     app.last_seen.insert(App::server_key(&s2), 1000);
 
@@ -497,7 +518,12 @@ fn sort_by_recent_respects_favorites_only() {
     let mut app = App::new(config, vec![], std::path::PathBuf::new(), vec![]).unwrap();
 
     app.favorites.clear();
-    let s2 = app.resolved_servers.iter().find(|s| s.name == "S2").cloned().unwrap();
+    let s2 = app
+        .resolved_servers
+        .iter()
+        .find(|s| s.name == "S2")
+        .cloned()
+        .unwrap();
     app.favorites.insert(App::server_key(&s2));
 
     app.sort_by_recent = true;

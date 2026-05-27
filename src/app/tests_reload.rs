@@ -49,7 +49,13 @@ fn app_new_with_load_error_warning_sets_error_mode() {
         path: "/fake/prod.yaml".to_string(),
         error: "file not found".to_string(),
     };
-    let app = App::new(config, vec![warning], std::path::PathBuf::from("/fake"), vec![]).unwrap();
+    let app = App::new(
+        config,
+        vec![warning],
+        std::path::PathBuf::from("/fake"),
+        vec![],
+    )
+    .unwrap();
     assert!(matches!(app.app_mode, AppMode::Error(_)));
 }
 
@@ -60,7 +66,13 @@ fn app_new_with_circular_warning_sets_error_mode() {
         label: "loop".to_string(),
         path: "/fake/loop.yaml".to_string(),
     };
-    let app = App::new(config, vec![warning], std::path::PathBuf::from("/fake"), vec![]).unwrap();
+    let app = App::new(
+        config,
+        vec![warning],
+        std::path::PathBuf::from("/fake"),
+        vec![],
+    )
+    .unwrap();
     assert!(matches!(app.app_mode, AppMode::Error(_)));
 }
 

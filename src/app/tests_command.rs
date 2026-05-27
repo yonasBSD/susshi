@@ -108,7 +108,12 @@ fn poll_cmd_receives_success_result() {
 
     app.poll_cmd();
 
-    if let CmdState::Done { cmd, output, exit_ok } = &app.cmd_state {
+    if let CmdState::Done {
+        cmd,
+        output,
+        exit_ok,
+    } = &app.cmd_state
+    {
         assert_eq!(cmd, "uptime");
         assert_eq!(output, "load: 0.5");
         assert!(*exit_ok);

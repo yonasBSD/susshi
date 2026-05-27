@@ -71,10 +71,8 @@ fn effective_tunnels_no_tunnels() {
 #[test]
 fn effective_tunnels_with_yaml_tunnels() {
     let mut app = make_app_with_server();
-    app.resolved_servers[0].tunnels = vec![
-        make_tunnel_cfg("pg", 5432),
-        make_tunnel_cfg("redis", 6379),
-    ];
+    app.resolved_servers[0].tunnels =
+        vec![make_tunnel_cfg("pg", 5432), make_tunnel_cfg("redis", 6379)];
     let server = app.resolved_servers[0].clone();
     let tunnels = app.effective_tunnels(&server);
     assert_eq!(tunnels.len(), 2);
@@ -393,7 +391,10 @@ fn open_tunnel_form_edit_opens_form() {
     app.tunnel_overlay = Some(TunnelOverlayState::List { selected: 0 });
 
     app.open_tunnel_form_edit();
-    assert!(matches!(app.tunnel_overlay, Some(TunnelOverlayState::Form(_))));
+    assert!(matches!(
+        app.tunnel_overlay,
+        Some(TunnelOverlayState::Form(_))
+    ));
 }
 
 #[test]
@@ -401,7 +402,10 @@ fn open_tunnel_form_add_opens_form() {
     let mut app = make_app_with_server();
     app.tunnel_overlay = Some(TunnelOverlayState::List { selected: 0 });
     app.open_tunnel_form_add();
-    assert!(matches!(app.tunnel_overlay, Some(TunnelOverlayState::Form(_))));
+    assert!(matches!(
+        app.tunnel_overlay,
+        Some(TunnelOverlayState::Form(_))
+    ));
 }
 
 #[test]
