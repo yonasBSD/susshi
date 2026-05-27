@@ -506,3 +506,23 @@ mod tests_tunnel_form;
 #[cfg(test)]
 #[path = "app/tests_state_mutations.rs"]
 mod tests_state_mutations;
+
+#[cfg(test)]
+#[path = "app/tests_tunnel_state.rs"]
+mod tests_tunnel_state;
+
+#[cfg(test)]
+#[path = "app/tests_scp_state.rs"]
+mod tests_scp_state;
+
+#[cfg(test)]
+#[path = "app/tests_overview.rs"]
+mod tests_overview;
+
+#[cfg(test)]
+#[path = "app/tests_command.rs"]
+mod tests_command;
+
+#[cfg(test)]
+#[path = "app/tests_selection_extended.rs"]
+mod tests_selection_extended;
