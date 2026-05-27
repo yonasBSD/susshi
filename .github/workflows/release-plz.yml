@@ -16,6 +16,8 @@ jobs:
     concurrency:
       group: release-plz-${{ github.ref }}
       cancel-in-progress: false
+    outputs:
+      releases_created: ${{ steps.release-plz.outputs.releases_created }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -29,6 +31,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run release-plz
+        id: release-plz
         uses: release-plz/action@v0.5
         env:
           # A PAT is required here (not GITHUB_TOKEN) so that the tag pushed by

@@ -1,6 +1,6 @@
 [package]
 name = "susshi"
-version = "0.15.7"
+version = "0.15.10"
 edition = "2024"
 description = "A modern terminal-based SSH connection manager with a beautiful Catppuccin TUI"
 license = "MIT"
@@ -48,7 +48,7 @@ ssh2 = "0.9"
 
 [build-dependencies]
 clap = { version = "4", features = ["derive"] }
-clap_mangen = "0.2"
+clap_mangen = "0.3"
 flate2 = "1"
 
 [dev-dependencies]
