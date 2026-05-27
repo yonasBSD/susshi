@@ -1,4 +1,68 @@
 use super::*;
+use crate::config::{ConfigEntry, Group, IncludeWarning, Server};
+
+fn make_simple_config_for_reload() -> Config {
+    Config {
+        defaults: None,
+        includes: vec![],
+        groups: vec![ConfigEntry::Group(Group {
+            name: "G".to_string(),
+            user: None,
+            ssh_key: None,
+            mode: None,
+            ssh_port: None,
+            ssh_options: None,
+            wallix: None,
+            wallix_group: None,
+            jump: None,
+            probe_filesystems: None,
+            environments: None,
+            tunnels: None,
+            tags: None,
+            servers: Some(vec![Server {
+                name: "s1".to_string(),
+                host: "10.0.0.1".to_string(),
+                user: None,
+                ssh_key: None,
+                ssh_port: None,
+                ssh_options: None,
+                mode: None,
+                wallix: None,
+                jump: None,
+                probe_filesystems: None,
+                tunnels: None,
+                tags: None,
+                ..Default::default()
+            }]),
+        })],
+        vars: Default::default(),
+    }
+}
+
+// ── lifecycle: warnings set error mode ───────────────────────────────────────
+
+#[test]
+fn app_new_with_load_error_warning_sets_error_mode() {
+    let config = make_simple_config_for_reload();
+    let warning = IncludeWarning::LoadError {
+        label: "prod".to_string(),
+        path: "/fake/prod.yaml".to_string(),
+        error: "file not found".to_string(),
+    };
+    let app = App::new(config, vec![warning], std::path::PathBuf::from("/fake"), vec![]).unwrap();
+    assert!(matches!(app.app_mode, AppMode::Error(_)));
+}
+
+#[test]
+fn app_new_with_circular_warning_sets_error_mode() {
+    let config = make_simple_config_for_reload();
+    let warning = IncludeWarning::Circular {
+        label: "loop".to_string(),
+        path: "/fake/loop.yaml".to_string(),
+    };
+    let app = App::new(config, vec![warning], std::path::PathBuf::from("/fake"), vec![]).unwrap();
+    assert!(matches!(app.app_mode, AppMode::Error(_)));
+}
 
 #[test]
 fn test_reload_detects_new_host_in_included_file() {

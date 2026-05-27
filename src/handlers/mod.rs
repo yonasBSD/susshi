@@ -95,3 +95,78 @@ pub fn handle_mouse_event(mouse: MouseEvent, app: &mut App, size: Rect) -> io::R
 
     Ok(false)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::layout::Rect;
+
+    // ── is_in_rect ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn is_in_rect_top_left_corner() {
+        let r = Rect::new(10, 10, 20, 20);
+        assert!(is_in_rect(10, 10, r));
+    }
+
+    #[test]
+    fn is_in_rect_bottom_right_corner_exclusive() {
+        let r = Rect::new(10, 10, 20, 20);
+        // x + width = 30, y + height = 30 → exclusive boundary.
+        assert!(!is_in_rect(30, 30, r));
+        assert!(is_in_rect(29, 29, r));
+    }
+
+    #[test]
+    fn is_in_rect_outside_left() {
+        let r = Rect::new(10, 10, 20, 20);
+        assert!(!is_in_rect(9, 15, r));
+    }
+
+    #[test]
+    fn is_in_rect_outside_right() {
+        let r = Rect::new(10, 10, 20, 20);
+        assert!(!is_in_rect(30, 15, r));
+    }
+
+    #[test]
+    fn is_in_rect_outside_top() {
+        let r = Rect::new(10, 10, 20, 20);
+        assert!(!is_in_rect(15, 9, r));
+    }
+
+    #[test]
+    fn is_in_rect_outside_bottom() {
+        let r = Rect::new(10, 10, 20, 20);
+        assert!(!is_in_rect(15, 30, r));
+    }
+
+    // ── get_layout ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn get_layout_areas_within_bounds() {
+        let size = Rect::new(0, 0, 200, 50);
+        let layout = get_layout(size);
+
+        // Both areas must be within the terminal bounds.
+        assert!(layout.list_area.x + layout.list_area.width <= size.width);
+        assert!(layout.tabs_area.x + layout.tabs_area.width <= size.width);
+        assert!(layout.list_area.y + layout.list_area.height <= size.height);
+        assert!(layout.tabs_area.y + layout.tabs_area.height <= size.height);
+    }
+
+    #[test]
+    fn get_layout_list_narrower_than_terminal() {
+        let size = Rect::new(0, 0, 120, 40);
+        let layout = get_layout(size);
+        // List pane is 67% of horizontal space → strictly narrower than full width.
+        assert!(layout.list_area.width < size.width);
+    }
+
+    #[test]
+    fn get_layout_tabs_height_is_three() {
+        let size = Rect::new(0, 0, 100, 30);
+        let layout = get_layout(size);
+        assert_eq!(layout.tabs_area.height, 3);
+    }
+}

@@ -136,3 +136,82 @@ fn record_connection_timestamp_is_recent() {
     assert!(ts <= now);
     assert!(now - ts < 5);
 }
+
+// ── expansion_state: expand_all ──────────────────────────────────────────────
+
+#[test]
+fn expand_all_inserts_group_keys() {
+    let config = make_simple_config();
+    let mut app = App::new(config, vec![], std::path::PathBuf::from("/fake"), vec![]).unwrap();
+    app.expanded_items.clear();
+
+    app.expand_all();
+
+    // make_simple_config has Group "Prod" with no environments.
+    assert!(app.expanded_items.contains("Group:Prod"));
+    assert!(app.items_dirty);
+}
+
+#[test]
+fn expand_all_inserts_namespace_and_env_keys() {
+    let config = make_namespace_config();
+    let mut app = App::new(config, vec![], std::path::PathBuf::from("/fake"), vec![]).unwrap();
+    app.expanded_items.clear();
+
+    app.expand_all();
+
+    // make_namespace_config has a RootGroup and a "CES" namespace with CES_Group.
+    assert!(app.expanded_items.contains("Group:RootGroup"));
+    assert!(app.expanded_items.contains("NS:CES"));
+    assert!(app.expanded_items.contains("NS:CES:Group:CES_Group"));
+}
+
+#[test]
+fn expand_all_marks_dirty() {
+    let config = make_simple_config();
+    let mut app = App::new(config, vec![], std::path::PathBuf::from("/fake"), vec![]).unwrap();
+    app.items_dirty = false;
+
+    app.expand_all();
+
+    assert!(app.items_dirty);
+}
+
+// ── favorites: toggle_favorite / is_selected_favorite ───────────────────────
+
+fn make_app_with_selected_server() -> App {
+    let config = make_simple_config();
+    let mut app = App::new(config, vec![], std::path::PathBuf::from("/fake"), vec![]).unwrap();
+    app.favorites.clear();
+    app.expanded_items.insert("Group:Prod".to_string());
+    app.items_dirty = true;
+    app.get_visible_items();
+    app.select(1); // select "web-01" (index 1 after group header)
+    app
+}
+
+#[test]
+fn toggle_favorite_adds_server() {
+    let mut app = make_app_with_selected_server();
+    assert!(!app.is_selected_favorite());
+    app.toggle_favorite();
+    assert!(app.is_selected_favorite());
+}
+
+#[test]
+fn toggle_favorite_removes_server() {
+    let mut app = make_app_with_selected_server();
+    app.toggle_favorite(); // add
+    assert!(app.is_selected_favorite());
+    app.toggle_favorite(); // remove
+    assert!(!app.is_selected_favorite());
+}
+
+#[test]
+fn is_selected_favorite_returns_false_when_no_server() {
+    let config = make_simple_config();
+    let mut app = App::new(config, vec![], std::path::PathBuf::from("/fake"), vec![]).unwrap();
+    app.favorites.clear();
+    // No expansion → group header selected, not a server.
+    assert!(!app.is_selected_favorite());
+}
