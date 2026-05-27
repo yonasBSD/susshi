@@ -298,6 +298,9 @@ jobs:
               su builder -s /bin/bash -c 'cd /pkg && makepkg --printsrcinfo > /pkg/.SRCINFO'
             "
 
+      - name: Fix workspace permissions after Docker
+        run: sudo chown -R "$USER" .
+
       - name: Commit and push if changed
         run: |
           git config user.name "github-actions[bot]"
