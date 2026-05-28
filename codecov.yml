@@ -1,0 +1,21 @@
+coverage:
+  precision: 2
+  round: down
+  range: "70...85"
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 2%
+    patch:
+      default:
+        target: 70%
+        threshold: 5%
+
+ignore:
+  # UI rendering requires a live terminal — not unit-testable
+  - "src/ui/**"
+  # Binary entry point — integration-tested via smoke tests
+  - "src/main.rs"
+  # Localization string table only
+  - "src/i18n.rs"

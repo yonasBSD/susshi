@@ -1,9 +1,17 @@
-name: release-plz
+name: Changelog & Release PR
+
+# Runs on every push to master.
+#
+# Two outcomes depending on the state of the branch:
+#   - Pending commits exist  → open or refresh the release PR
+#     (bumps version in Cargo.toml, updates CHANGELOG.md).
+#   - Release PR was merged  → create the git tag, publish to crates.io,
+#     and create the GitHub Release.
+#     The tag push then triggers release.yml.
 
 on:
   push:
-    branches:
-      - master
+    branches: [master]
 
 permissions:
   pull-requests: write
@@ -11,18 +19,17 @@ permissions:
 
 jobs:
   release-plz:
-    name: Release-plz
+    name: Run release-plz
     runs-on: ubuntu-latest
+    # Do NOT cancel in progress: two concurrent runs can corrupt the release state.
     concurrency:
       group: release-plz-${{ github.ref }}
       cancel-in-progress: false
-    outputs:
-      releases_created: ${{ steps.release-plz.outputs.releases_created }}
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0  # required: release-plz needs the full git history
+          fetch-depth: 0  # release-plz needs the full git history
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -31,11 +38,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run release-plz
-        id: release-plz
         uses: release-plz/action@v0.5
         env:
-          # A PAT is required here (not GITHUB_TOKEN) so that the tag pushed by
-          # release-plz triggers the release.yml workflow. GitHub does not fire
-          # workflow events for actions performed by the built-in GITHUB_TOKEN.
+          # Must be a PAT, not GITHUB_TOKEN: GitHub will not fire workflow events
+          # (i.e. release.yml) for tag pushes made with the built-in token.
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

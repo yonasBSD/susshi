@@ -526,3 +526,11 @@ mod tests_command;
 #[cfg(test)]
 #[path = "app/tests_selection_extended.rs"]
 mod tests_selection_extended;
+
+#[path = "app/tests_expansion_state.rs"]
+#[cfg(test)]
+mod tests_expansion_state;
+
+#[path = "app/tests_favorites.rs"]
+#[cfg(test)]
+mod tests_favorites;

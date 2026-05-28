@@ -52,6 +52,10 @@ impl ConnectionMode {
     }
 }
 
+const MAX_INCLUDE_DEPTH: u32 = 8;
+const MAX_FILE_SIZE_BYTES: u64 = 5 * 1024 * 1024; // 5 MiB
+const HTTP_TIMEOUT_SECS: u64 = 10;
+
 #[derive(Error, Debug)]
 pub enum ConfigError {
     #[error("IO error: {0}")]
@@ -60,6 +64,10 @@ pub enum ConfigError {
     Yaml(#[from] serde_yaml_ng::Error),
     #[error("Missing configuration for server '{0}': {1}")]
     MissingField(String, String),
+    #[error("File too large: '{path}' exceeds {limit} bytes")]
+    FileTooLarge { path: String, limit: u64 },
+    #[error("Include depth limit ({limit}) exceeded at: '{path}'")]
+    IncludeDepthExceeded { path: String, limit: u32 },
 }
 
 // ─── Multi-fichiers ───────────────────────────────────────────────────────────
@@ -501,9 +509,25 @@ impl Config {
     pub fn load_merged<P: AsRef<Path>>(
         path: P,
         loading_stack: &mut HashSet<PathBuf>,
+        depth: u32,
     ) -> Result<(Self, Vec<IncludeWarning>, Vec<ValidationWarning>), ConfigError> {
         let path = path.as_ref();
         let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+
+        if depth > MAX_INCLUDE_DEPTH {
+            return Err(ConfigError::IncludeDepthExceeded {
+                path: canonical.display().to_string(),
+                limit: MAX_INCLUDE_DEPTH,
+            });
+        }
+
+        let file_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+        if file_size > MAX_FILE_SIZE_BYTES {
+            return Err(ConfigError::FileTooLarge {
+                path: canonical.display().to_string(),
+                limit: MAX_FILE_SIZE_BYTES,
+            });
+        }
 
         // Lecture du contenu pour la validation ET le parsing.
         let content = std::fs::read_to_string(path)?;
@@ -613,8 +637,10 @@ impl Config {
 
             // Chargement récursif du sous-fichier
             let (mut sub_config, mut sub_inc, sub_val) =
-                match Self::load_merged(&sub_path, loading_stack) {
+                match Self::load_merged(&sub_path, loading_stack, depth + 1) {
                     Ok(r) => r,
+                    // Profondeur excessive : erreur dure, pas avertissement silencieux.
+                    Err(e @ ConfigError::IncludeDepthExceeded { .. }) => return Err(e),
                     Err(e) => {
                         inc_warnings.push(IncludeWarning::LoadError {
                             label: entry.label.clone(),
@@ -1004,9 +1030,17 @@ fn merge_default_structs(base: &Defaults, overrides: &Defaults) -> Defaults {
 
 // ─── Validation YAML ─────────────────────────────────────────────────────────
 
-/// Télécharge le contenu d'une URL HTTPS (ou HTTP) et le retourne sous forme de `String`.
+/// Télécharge le contenu d'une URL HTTPS et le retourne sous forme de `String`.
+/// Rejette les URLs HTTP non-chiffrées. Timeout global : `HTTP_TIMEOUT_SECS`.
+/// Le corps est limité à 10 Mo par défaut (limite ureq 3.x sur `read_to_string`).
 fn fetch_url(url: &str) -> Result<String, String> {
-    ureq::get(url)
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .https_only(true)
+        .timeout_global(Some(std::time::Duration::from_secs(HTTP_TIMEOUT_SECS)))
+        .build()
+        .into();
+    agent
+        .get(url)
         .call()
         .map_err(|e| e.to_string())?
         .body_mut()
@@ -2036,7 +2070,8 @@ groups:
         let main_file = write_temp_yaml(&main_yaml);
 
         let (config, warnings, _val) =
-            Config::load_merged(main_file.path(), &mut std::collections::HashSet::new()).unwrap();
+            Config::load_merged(main_file.path(), &mut std::collections::HashSet::new(), 0)
+                .unwrap();
         assert!(warnings.is_empty(), "Expected no warnings: {:?}", warnings);
 
         let resolved = config.resolve().unwrap();
@@ -2095,7 +2130,8 @@ groups:
         let main_file = write_temp_yaml(&main_yaml);
 
         let (config, warnings, _val) =
-            Config::load_merged(main_file.path(), &mut std::collections::HashSet::new()).unwrap();
+            Config::load_merged(main_file.path(), &mut std::collections::HashSet::new(), 0)
+                .unwrap();
         assert!(warnings.is_empty());
 
         let resolved = config.resolve().unwrap();
@@ -2128,7 +2164,8 @@ groups:
         let main_file = write_temp_yaml(main_yaml);
 
         let (config, warnings, _val) =
-            Config::load_merged(main_file.path(), &mut std::collections::HashSet::new()).unwrap();
+            Config::load_merged(main_file.path(), &mut std::collections::HashSet::new(), 0)
+                .unwrap();
 
         // Un avertissement LoadError doit être émis
         assert_eq!(warnings.len(), 1);
@@ -2182,7 +2219,8 @@ groups: []
         let main_file = write_temp_yaml(&main_yaml);
 
         let (config, warnings, _val) =
-            Config::load_merged(main_file.path(), &mut std::collections::HashSet::new()).unwrap();
+            Config::load_merged(main_file.path(), &mut std::collections::HashSet::new(), 0)
+                .unwrap();
 
         // Aucun avertissement : les includes imbriqués sont désormais résolus récursivement
         assert!(
@@ -2252,7 +2290,8 @@ groups: []
         let main_file = write_temp_yaml(&main_yaml);
 
         let (config, _warnings, _val) =
-            Config::load_merged(main_file.path(), &mut std::collections::HashSet::new()).unwrap();
+            Config::load_merged(main_file.path(), &mut std::collections::HashSet::new(), 0)
+                .unwrap();
         let resolved = config.resolve().unwrap();
 
         let sub_srv = resolved.iter().find(|s| s.name == "sub_srv").unwrap();
@@ -2293,7 +2332,8 @@ groups: []
         let main_file = write_temp_yaml(&main_yaml);
 
         let (config, _warnings, _val) =
-            Config::load_merged(main_file.path(), &mut std::collections::HashSet::new()).unwrap();
+            Config::load_merged(main_file.path(), &mut std::collections::HashSet::new(), 0)
+                .unwrap();
         let resolved = config.resolve().unwrap();
 
         let sub_srv = resolved.iter().find(|s| s.name == "sub_srv").unwrap();
@@ -2334,7 +2374,7 @@ groups:
         std::fs::write(file_b.path(), yaml_b.as_bytes()).unwrap();
 
         let (config, warnings, _val) =
-            Config::load_merged(file_a.path(), &mut std::collections::HashSet::new()).unwrap();
+            Config::load_merged(file_a.path(), &mut std::collections::HashSet::new(), 0).unwrap();
 
         let has_circular = warnings
             .iter()
@@ -2412,7 +2452,8 @@ groups: []
         let main_file = write_temp_yaml(&main_yaml);
 
         let (config, _, _) =
-            Config::load_merged(main_file.path(), &mut std::collections::HashSet::new()).unwrap();
+            Config::load_merged(main_file.path(), &mut std::collections::HashSet::new(), 0)
+                .unwrap();
         let resolved = config.resolve().unwrap();
 
         let ns_srv = resolved.iter().find(|s| s.name == "ns_srv").unwrap();
@@ -3198,6 +3239,152 @@ groups:
             warnings.iter().any(|w| w.field == "bad_env_key"),
             "expected ValidationWarning for bad_env_key, got: {:?}",
             warnings
+        );
+    }
+
+    // ── ConnectionMode tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_connection_mode_next_cycles_all_three() {
+        assert_eq!(ConnectionMode::Direct.next(), ConnectionMode::Jump);
+        assert_eq!(ConnectionMode::Jump.next(), ConnectionMode::Wallix);
+        assert_eq!(ConnectionMode::Wallix.next(), ConnectionMode::Direct);
+    }
+
+    #[test]
+    fn test_connection_mode_from_index_round_trip() {
+        for i in 0..3usize {
+            let mode = ConnectionMode::from_index(i);
+            assert_eq!(mode.index(), i);
+        }
+    }
+
+    #[test]
+    fn test_connection_mode_from_index_unknown_gives_direct() {
+        assert_eq!(ConnectionMode::from_index(99), ConnectionMode::Direct);
+    }
+
+    #[test]
+    fn test_connection_mode_display() {
+        assert_eq!(ConnectionMode::Direct.to_string(), "direct");
+        assert_eq!(ConnectionMode::Jump.to_string(), "jump");
+        assert_eq!(ConnectionMode::Wallix.to_string(), "wallix");
+    }
+
+    // ── extend_tags unit tests ────────────────────────────────────────────────
+
+    #[test]
+    fn test_extend_tags_deduplication() {
+        let parent = vec!["prod".to_string(), "web".to_string()];
+        let child = vec!["web".to_string(), "db".to_string()];
+        let merged = extend_tags(Some(&parent), Some(&child));
+        assert_eq!(merged, vec!["prod", "web", "db"]);
+    }
+
+    #[test]
+    fn test_extend_tags_parent_only() {
+        let parent = vec!["a".to_string(), "b".to_string()];
+        let merged = extend_tags(Some(&parent), None);
+        assert_eq!(merged, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn test_extend_tags_child_only() {
+        let child = vec!["x".to_string()];
+        let merged = extend_tags(None, Some(&child));
+        assert_eq!(merged, vec!["x"]);
+    }
+
+    #[test]
+    fn test_extend_tags_both_none_empty() {
+        assert!(extend_tags(None, None).is_empty());
+    }
+
+    // ── Phase A security tests ────────────────────────────────────────────────
+
+    #[test]
+    fn test_load_rejects_oversized_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("big.yaml");
+        // Write a file slightly over 5 MiB
+        let content = "groups: []\n".repeat((MAX_FILE_SIZE_BYTES as usize / 10) + 1);
+        std::fs::write(&path, content).unwrap();
+        let err = Config::load_merged(&path, &mut HashSet::new(), 0).unwrap_err();
+        assert!(
+            matches!(err, ConfigError::FileTooLarge { .. }),
+            "expected FileTooLarge, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_load_accepts_file_under_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("small.yaml");
+        std::fs::write(&path, "groups: []\n").unwrap();
+        assert!(Config::load_merged(&path, &mut HashSet::new(), 0).is_ok());
+    }
+
+    #[test]
+    fn test_include_depth_exceeded() {
+        let dir = tempfile::tempdir().unwrap();
+        // Build a chain of MAX_INCLUDE_DEPTH + 2 files: A → B → … → Z
+        let depth = (MAX_INCLUDE_DEPTH + 2) as usize;
+        let paths: Vec<std::path::PathBuf> = (0..depth)
+            .map(|i| dir.path().join(format!("depth_{i}.yaml")))
+            .collect();
+        // Last file: leaf with no includes
+        std::fs::write(paths.last().unwrap(), "groups: []\n").unwrap();
+        // Each file includes the next
+        for i in (0..depth - 1).rev() {
+            let next = paths[i + 1].file_name().unwrap().to_string_lossy();
+            std::fs::write(
+                &paths[i],
+                format!("groups: []\nincludes:\n  - label: \"sub\"\n    path: \"{next}\"\n"),
+            )
+            .unwrap();
+        }
+        let err = Config::load_merged(&paths[0], &mut HashSet::new(), 0).unwrap_err();
+        assert!(
+            matches!(err, ConfigError::IncludeDepthExceeded { .. }),
+            "expected IncludeDepthExceeded, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_include_depth_at_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        // Build a chain of exactly MAX_INCLUDE_DEPTH files: depth 0 calls load_merged
+        // recursively; at depth MAX_INCLUDE_DEPTH the call still succeeds.
+        let depth = MAX_INCLUDE_DEPTH as usize;
+        let paths: Vec<std::path::PathBuf> = (0..=depth)
+            .map(|i| dir.path().join(format!("ok_{i}.yaml")))
+            .collect();
+        std::fs::write(paths.last().unwrap(), "groups: []\n").unwrap();
+        for i in (0..depth).rev() {
+            let next = paths[i + 1].file_name().unwrap().to_string_lossy();
+            std::fs::write(
+                &paths[i],
+                format!("groups: []\nincludes:\n  - label: \"sub\"\n    path: \"{next}\"\n"),
+            )
+            .unwrap();
+        }
+        assert!(
+            Config::load_merged(&paths[0], &mut HashSet::new(), 0).is_ok(),
+            "chain of {depth} levels should not exceed limit of {MAX_INCLUDE_DEPTH}"
+        );
+    }
+
+    #[test]
+    fn test_fetch_url_rejects_http_scheme() {
+        // https_only(true) rejects http:// before any network call — no mocking needed.
+        let result = fetch_url("http://example.com/config.yaml");
+        assert!(result.is_err(), "http:// URL should be rejected");
+        let msg = result.unwrap_err();
+        assert!(
+            msg.to_lowercase().contains("http")
+                || msg.to_lowercase().contains("https")
+                || msg.to_lowercase().contains("plain"),
+            "error message should mention the scheme issue, got: {msg}"
         );
     }
 }

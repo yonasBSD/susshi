@@ -56,6 +56,8 @@ mod tests {
             user: "admin".to_string(),
             port,
             ssh_key: String::new(),
+            ssh_cert: String::new(),
+            ssh_agent_sock: String::new(),
             ssh_options: vec![],
             default_mode: ConnectionMode::Direct,
             jump_host: None,
@@ -81,6 +83,8 @@ mod tests {
             wallix_selection_timeout_secs: 8,
             wallix_direct: false,
             wallix_authorization: None,
+            wallix_header_columns: vec![],
+            notes: String::new(),
         }
     }
 
