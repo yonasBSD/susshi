@@ -147,7 +147,7 @@ impl App {
     pub fn reload(&mut self) -> Result<(), ConfigError> {
         let mut stack = std::collections::HashSet::new();
         let (new_config, new_warnings, new_val_warnings) =
-            Config::load_merged(&self.config_path, &mut stack)?;
+            Config::load_merged(&self.config_path, &mut stack, 0)?;
         let resolved = new_config.resolve()?;
 
         self.config_hash = hash_config_file(&self.config_path);

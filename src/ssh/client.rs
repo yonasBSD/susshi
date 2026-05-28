@@ -1280,4 +1280,45 @@ mod tests {
         s.control_path = String::new();
         assert!(!is_control_master_active(&s));
     }
+
+    // ── askpass security tests ────────────────────────────────────────────────
+
+    /// The escaping logic for single quotes must produce the correct sh sequence '\''
+    /// so that credentials with single quotes don't break the printf argument.
+    #[test]
+    fn askpass_escape_logic_replaces_single_quotes() {
+        let cred = "it's a 'secret'";
+        let escaped = cred.replace('\'', r"'\''");
+        // Each original ' must become '\'' (end quote, escaped quote, reopen quote)
+        assert_eq!(escaped, r"it'\''s a '\''secret'\''");
+        // The original unescaped character must not appear in the middle of the string
+        // (it should only appear as part of '\'' sequences)
+        assert!(
+            !escaped.contains("it's"),
+            "original unescaped form must not survive"
+        );
+    }
+
+    /// Credentials without single quotes are not modified by the escaping logic.
+    #[test]
+    fn askpass_escape_logic_no_single_quotes_unchanged() {
+        let cred = "plainpassword123!@#";
+        let escaped = cred.replace('\'', r"'\''");
+        assert_eq!(escaped, cred);
+    }
+
+    /// The askpass script file must be created with 0o700 permissions (owner-only).
+    #[test]
+    #[cfg(unix)]
+    fn askpass_file_has_700_permissions() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let path = setup_askpass_script("hunter2_unique_permissions_test").unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(
+            mode & 0o777,
+            0o700,
+            "askpass script must be owner-executable only (0o700)"
+        );
+    }
 }

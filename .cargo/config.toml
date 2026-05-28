@@ -1,0 +1,5 @@
+[alias]
+# Run coverage excluding non-testable files (UI rendering, binary entry point, i18n strings).
+# Usage: cargo cov              → summary only
+#        cargo cov --html       → HTML report in target/llvm-cov/html/
+cov = "llvm-cov --ignore-filename-regex 'src/(ui/|main\\.rs|i18n\\.rs)' --summary-only"

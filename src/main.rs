@@ -72,7 +72,7 @@ fn validate_config(config_path: &std::path::Path) {
     }
 
     let mut stack = HashSet::new();
-    match Config::load_merged(config_path, &mut stack) {
+    match Config::load_merged(config_path, &mut stack, 0) {
         Err(e) => {
             eprintln!("ERREUR : {e}");
             process::exit(1);
@@ -534,7 +534,7 @@ fn main() -> io::Result<()> {
     }
 
     let (config, warnings, val_warnings) =
-        match Config::load_merged(config_path, &mut HashSet::new()) {
+        match Config::load_merged(config_path, &mut HashSet::new(), 0) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("Failed to load config: {}", e);

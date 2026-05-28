@@ -69,6 +69,8 @@ mod tests {
             user: "admin".to_string(),
             port: 22,
             ssh_key: "~/.ssh/id_rsa".to_string(),
+            ssh_cert: String::new(),
+            ssh_agent_sock: String::new(),
             ssh_options: vec![],
             default_mode: ConnectionMode::Direct,
             jump_host: None,
@@ -94,6 +96,8 @@ mod tests {
             wallix_selection_timeout_secs: 8,
             wallix_direct: false,
             wallix_authorization: None,
+            wallix_header_columns: vec![],
+            notes: String::new(),
         }
     }
 
@@ -116,5 +120,50 @@ mod tests {
         assert_eq!(s["port"], 22);
         assert_eq!(s["group"], "prod");
         assert_eq!(s["tags"][0], "web");
+    }
+
+    #[test]
+    fn multiple_servers_all_present() {
+        let s1 = make_server("alpha", "10.0.0.1", "g1");
+        let s2 = make_server("beta", "10.0.0.2", "g2");
+        let json = to_terraform_json(&[&s1, &s2]);
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["servers"].as_array().unwrap().len(), 2);
+        assert_eq!(v["servers"][0]["name"], "alpha");
+        assert_eq!(v["servers"][1]["name"], "beta");
+    }
+
+    #[test]
+    fn ssh_key_field_included() {
+        let mut srv = make_server("key-srv", "10.0.0.3", "g");
+        srv.ssh_key = "~/.ssh/prod_ed25519".into();
+        let json = to_terraform_json(&[&srv]);
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["servers"][0]["ssh_key"], "~/.ssh/prod_ed25519");
+    }
+
+    #[test]
+    fn namespace_field_included() {
+        let mut srv = make_server("ns-srv", "10.0.0.4", "g");
+        srv.namespace = "MyNS".into();
+        let json = to_terraform_json(&[&srv]);
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["servers"][0]["namespace"], "MyNS");
+    }
+
+    #[test]
+    fn env_field_included() {
+        let mut srv = make_server("env-srv", "10.0.0.5", "g");
+        srv.env_name = "staging".into();
+        let json = to_terraform_json(&[&srv]);
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["servers"][0]["env"], "staging");
+    }
+
+    #[test]
+    fn output_ends_with_newline() {
+        let srv = make_server("nl", "10.0.0.6", "g");
+        let json = to_terraform_json(&[&srv]);
+        assert!(json.ends_with('\n'));
     }
 }

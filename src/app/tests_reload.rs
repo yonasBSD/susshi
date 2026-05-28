@@ -97,7 +97,7 @@ fn test_reload_detects_new_host_in_included_file() {
     .unwrap();
 
     let (config, warnings, validation_warnings) =
-        Config::load_merged(&main_path, &mut std::collections::HashSet::new()).unwrap();
+        Config::load_merged(&main_path, &mut std::collections::HashSet::new(), 0).unwrap();
     assert!(warnings.is_empty());
     assert!(validation_warnings.is_empty());
 
