@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.16.0] — 2026-05-28
+
+### Added
+
+- Harden YAML deserialization + improve test coverage to 86%
+
+
 ## [0.15.12] — 2026-05-27
 
 ### Fixed
