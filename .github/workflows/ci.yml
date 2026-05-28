@@ -15,17 +15,45 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # ── 1. Quality gate ───────────────────────────────────────────────────────
+  # ── 0. Preflight ──────────────────────────────────────────────────────────
   #
+  # Release-plz PRs only touch Cargo.toml (version) and CHANGELOG.md —
+  # no code change, so running the full suite is wasteful.
+  # Detection uses the branch name (release-plz-*) rather than the actor
+  # login, because release-plz runs under a PAT and appears as the repo owner.
+  # Skipped jobs satisfy branch protection rules (GitHub treats them as green).
+  #
+  # Pipeline for normal PRs / pushes to master:
   #  lint → test → coverage
   #              → cross-platform builds
   #
   # audit and megalinter run independently (orthogonal signal).
   # ─────────────────────────────────────────────────────────────────────────
 
+  preflight:
+    name: Preflight
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.gate.outputs.skip }}
+    steps:
+      - name: Detect release-plz PR
+        id: gate
+        run: |
+          branch="${{ github.head_ref }}"
+          if [[ "$branch" == release-plz-* ]]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "::notice::Release-plz PR — CI skipped (version bump only, no code change)"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+  # ── 1. Quality gate ───────────────────────────────────────────────────────
+
   lint:
     name: Lint (fmt + clippy)
     runs-on: ubuntu-latest
+    needs: [preflight]
+    if: needs.preflight.outputs.skip != 'true'
     permissions:
       contents: read
     steps:
@@ -49,7 +77,8 @@ jobs:
   test:
     name: Tests
     runs-on: ubuntu-latest
-    needs: [lint]
+    needs: [preflight, lint]
+    if: needs.preflight.outputs.skip != 'true'
     permissions:
       contents: read
     steps:
@@ -70,6 +99,8 @@ jobs:
   audit:
     name: Security audit
     runs-on: ubuntu-latest
+    needs: [preflight]
+    if: needs.preflight.outputs.skip != 'true'
     permissions:
       contents: read
     steps:
@@ -91,6 +122,8 @@ jobs:
   megalinter:
     name: MegaLinter
     runs-on: ubuntu-latest
+    needs: [preflight]
+    if: needs.preflight.outputs.skip != 'true'
     permissions:
       contents: read
       statuses: write
@@ -110,7 +143,8 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [preflight, test]
+    if: needs.preflight.outputs.skip != 'true'
     permissions:
       contents: read
     steps:
@@ -147,7 +181,8 @@ jobs:
   cross-platform:
     name: Build — ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
-    needs: [test]
+    needs: [preflight, test]
+    if: needs.preflight.outputs.skip != 'true'
     permissions:
       contents: read
     strategy:
