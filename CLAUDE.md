@@ -14,6 +14,8 @@ cargo test --verbose           # run tests
 cargo fmt --all -- --check     # check formatting
 cargo clippy --all-targets --all-features -- -D warnings  # strict lint
 cargo build --features openssl-vendored  # musl targets needing vendored OpenSSL
+cargo cov                      # coverage summary excluding UI/main/i18n (requires cargo-llvm-cov)
+cargo cov --html               # HTML coverage report in target/llvm-cov/html/
 ```
 
 CI also tests these targets: `x86_64-unknown-linux-musl`, `x86_64-pc-windows-msvc`, `x86_64-apple-darwin`, `aarch64-apple-darwin`.
@@ -70,3 +72,35 @@ CI also tests these targets: `x86_64-unknown-linux-musl`, `x86_64-pc-windows-msv
 **Never push directly to master.** All changes must go through a PR.
 
 **Conventional commits are required:** `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, `perf:` — these drive automatic changelog generation and version bumping.
+
+- `feat:` on a 0.x crate → **minor bump** (e.g. 0.15.x → 0.16.0) — enforced by `features_always_increment_minor = true` in `release-plz.toml`.
+- `ci:`, `test:`, `chore:`, `docs:` commits are excluded from the changelog and do not trigger a release PR alone (`release_commits` guard in `release-plz.toml`).
+
+## CI pipeline
+
+```
+ci.yml      preflight → lint → test → coverage
+                                    → cross-platform smoke builds (5 targets)
+            audit, megalinter (independent)
+
+release-plz.yml   push to master → open/update release PR or cut tag + publish
+release.yml       tag push → build binaries + DEB + RPM → update-pkgbuild commit
+aur-publish.yml   after release.yml → push susshi + susshi-bin to AUR
+```
+
+**release-plz uses a PAT (`RELEASE_PLZ_TOKEN`)**, not the built-in `GITHUB_TOKEN` — this is required so the tag it pushes triggers `release.yml`. It acts as the repo owner, not as a bot account.
+
+**Release PR branches** are named `release-plz-<timestamp>`. The CI `preflight` job detects this pattern and skips the full suite (version-bump PRs contain no code change).
+
+**`update-pkgbuild`** (last job in `release.yml`) commits refreshed `PKGBUILD`, `PKGBUILD.bin`, `.SRCINFO` to master using `RELEASE_PLZ_TOKEN`. The script is at `scripts/update-pkgbuild.sh` and downloads `susshi-linux-x86_64` to compute the binary checksum.
+
+## Test coverage
+
+Coverage target: **≥ 80 %** on testable files (UI, `main.rs`, `i18n.rs` excluded).
+
+Files excluded from measurement:
+- `src/ui/**` — requires a live terminal, untestable
+- `src/main.rs` — binary entry point
+- `src/i18n.rs` — static string table
+
+Tests that use `App::new()` must clear persisted state after construction — `state::load_state()` populates `expanded_items` and `favorites` from `~/.local/share/susshi/state.json` on the dev machine, which pollutes assertions.
