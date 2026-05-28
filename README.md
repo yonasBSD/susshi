@@ -12,7 +12,7 @@
 
 **susshi** is a terminal-based SSH connection manager written in Rust — hierarchical inventory, Catppuccin-themed TUI, jump hosts, Wallix bastions, tunnels, and SCP in one place.
 
-![susshi TUI screenshot](docs/susshi.png)
+[![asciicast](https://asciinema.org/a/1154653.svg)](https://asciinema.org/a/1154653)
 
 ## 🧐 Why Susshi?
 
