@@ -30,7 +30,7 @@ wget https://github.com/yatoub/susshi/releases/latest/download/susshi-macos-amd6
 paru -S susshi-bin
 ```
 
-For DEB/RPM packages and legacy glibc builds see the [releases page](https://github.com/yatoub/susshi/releases/latest).
+For DEB/RPM packages see the [releases page](https://github.com/yatoub/susshi/releases/latest).
 
 > **Windows:** partial support — TUI and config parsing work, interactive SSH (PTY) and Wallix are Unix-only.
 

@@ -1,5 +1,12 @@
 name: Publish to AUR
 
+# Triggered automatically after the Release workflow succeeds,
+# or manually via workflow_dispatch to re-publish an existing tag.
+#
+# Updates two AUR packages in parallel:
+#   susshi      — builds from the released source tarball
+#   susshi-bin  — installs the pre-built susshi-linux-x86_64 binary
+
 on:
   workflow_run:
     workflows: ["Release"]
@@ -11,29 +18,25 @@ on:
         required: true
 
 jobs:
-  aur-publish:
-    name: Publish to AUR
+  # ── susshi (source package) ───────────────────────────────────────────────
+
+  aur-source:
+    name: Publish susshi (source)
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # For workflow_run: only proceed if the Release workflow succeeded.
     if: >
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
 
     steps:
-      - name: Resolve tag
-        id: resolve
+      - name: Resolve version to publish
+        id: ver
         env:
           INPUT_TAG: ${{ github.event.inputs.tag }}
           RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
-          if [ -n "$INPUT_TAG" ]; then
-            TAG="$INPUT_TAG"
-          else
-            TAG="$RUN_HEAD_BRANCH"
-          fi
-          # Validate: must look like a semver tag (vX.Y.Z)
+          TAG="${INPUT_TAG:-$RUN_HEAD_BRANCH}"
           if ! echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
             echo "Invalid tag format: $TAG" >&2
             exit 1
@@ -41,27 +44,27 @@ jobs:
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "version=${TAG#v}" >> $GITHUB_OUTPUT
 
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Compute b2sum of release archive
-        id: b2sum
+      - name: Compute checksum of source archive
+        id: checksum
         env:
-          TAG: ${{ steps.resolve.outputs.tag }}
+          TAG: ${{ steps.ver.outputs.tag }}
         run: |
           curl -fsSL "https://github.com/yatoub/susshi/archive/refs/tags/${TAG}.tar.gz" -o archive.tar.gz
-          echo "sum=$(b2sum archive.tar.gz | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          echo "b2sum=$(b2sum archive.tar.gz | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
-      - name: Update PKGBUILD
+      - name: Patch PKGBUILD
         env:
-          VERSION: ${{ steps.resolve.outputs.version }}
-          B2SUM: ${{ steps.b2sum.outputs.sum }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          B2SUM: ${{ steps.checksum.outputs.b2sum }}
         run: |
           sed -i "s/^pkgver=.*/pkgver=${VERSION}/" PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
           sed -i "s/^b2sums=(.*/b2sums=(${B2SUM})/" PKGBUILD
 
-      - name: Publish to AUR
+      - name: Push to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.3
         with:
           pkgname: susshi
@@ -69,12 +72,14 @@ jobs:
           commit_username: ${{ secrets.AUR_USERNAME }}
           commit_email: ${{ secrets.AUR_EMAIL }}
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-          commit_message: "chore: update to ${{ steps.resolve.outputs.tag }}"
+          commit_message: "chore: update to ${{ steps.ver.outputs.tag }}"
           ssh_keyscan_types: rsa,ecdsa,ed25519
           allow_empty_commits: false
 
-  aur-publish-bin:
-    name: Publish susshi-bin to AUR
+  # ── susshi-bin (pre-built binary package) ─────────────────────────────────
+
+  aur-bin:
+    name: Publish susshi-bin (pre-built)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -83,18 +88,13 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
 
     steps:
-      - name: Resolve tag
+      - name: Resolve version to publish
         id: ver
         env:
           INPUT_TAG: ${{ github.event.inputs.tag }}
           RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
-          if [ -n "$INPUT_TAG" ]; then
-            TAG="$INPUT_TAG"
-          else
-            TAG="$RUN_HEAD_BRANCH"
-          fi
-          # Validate: must look like a semver tag (vX.Y.Z)
+          TAG="${INPUT_TAG:-$RUN_HEAD_BRANCH}"
           if ! echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
             echo "Invalid tag format: $TAG" >&2
             exit 1
@@ -102,25 +102,24 @@ jobs:
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "version=${TAG#v}" >> $GITHUB_OUTPUT
 
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Compute b2sums for susshi-bin
-        id: b2sums
+      - name: Compute checksums (source archive + Linux binary)
+        id: checksums
         env:
           TAG: ${{ steps.ver.outputs.tag }}
         run: |
           curl -fsSL "https://github.com/yatoub/susshi/archive/refs/tags/${TAG}.tar.gz" -o archive.tar.gz
-          curl -fsSL "https://github.com/yatoub/susshi/releases/download/${TAG}/susshi-linux-amd64" -o susshi-linux-amd64
+          curl -fsSL "https://github.com/yatoub/susshi/releases/download/${TAG}/susshi-linux-x86_64" -o susshi-linux-x86_64
           echo "src=$(b2sum archive.tar.gz | cut -d' ' -f1)" >> $GITHUB_OUTPUT
-          echo "bin=$(b2sum susshi-linux-amd64 | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          echo "bin=$(b2sum susshi-linux-x86_64 | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
-      - name: Update PKGBUILD.bin
+      - name: Patch PKGBUILD.bin
         env:
-          TAG: ${{ steps.ver.outputs.tag }}
           VERSION: ${{ steps.ver.outputs.version }}
-          B2SUM_SRC: ${{ steps.b2sums.outputs.src }}
-          B2SUM_BIN: ${{ steps.b2sums.outputs.bin }}
+          B2SUM_SRC: ${{ steps.checksums.outputs.src }}
+          B2SUM_BIN: ${{ steps.checksums.outputs.bin }}
         run: |
           cp PKGBUILD.bin PKGBUILD
           sed -i "s/^pkgver=.*/pkgver=${VERSION}/" PKGBUILD
@@ -128,7 +127,7 @@ jobs:
           sed -i "s/^b2sums=(.*/b2sums=(${B2SUM_SRC})/" PKGBUILD
           sed -i "s/^b2sums_x86_64=(.*/b2sums_x86_64=(${B2SUM_BIN})/" PKGBUILD
 
-      - name: Publish susshi-bin to AUR
+      - name: Push to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.3
         with:
           pkgname: susshi-bin

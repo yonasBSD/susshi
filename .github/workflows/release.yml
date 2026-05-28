@@ -1,9 +1,20 @@
 name: Release
 
+# Triggered by a version tag (vX.Y.Z) pushed by release-plz,
+# or manually via workflow_dispatch to re-publish an existing tag.
+#
+# Pipeline (parallel):
+#   build          — one binary per platform, uploaded to the GitHub Release
+#   build-deb      — amd64 + arm64 DEB packages
+#   build-rpm      — Fedora RPM package
+#
+# After build:
+#   update-pkgbuild — commits refreshed PKGBUILD to master,
+#                     which triggers aur-publish.yml
+
 on:
   push:
-    tags:
-      - "v*.*.*"
+    tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
       tag:
@@ -14,9 +25,13 @@ permissions:
   contents: write
 
 jobs:
+  # ── Platform binaries ─────────────────────────────────────────────────────
+
   build:
-    name: Build ${{ matrix.target }}
+    name: Binary — ${{ matrix.asset_name }}
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -24,63 +39,51 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             binary_name: susshi
-            asset_name: susshi-linux-amd64
-            build_tool: cargo
+            asset_name: susshi-linux-x86_64
             openssl_mode: system
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu.2.17
-            binary_name: susshi
-            asset_name: susshi-linux-amd64-glibc217
-            build_tool: zigbuild
-            openssl_mode: vendored
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             binary_name: susshi
-            asset_name: susshi-linux-amd64-musl
-            build_tool: cargo
+            asset_name: susshi-linux-x86_64-static
             openssl_mode: vendored
           - os: macos-latest
             target: x86_64-apple-darwin
             binary_name: susshi
-            asset_name: susshi-macos-amd64
-            build_tool: cargo
+            asset_name: susshi-macos-intel
             openssl_mode: vendored
           - os: macos-14
             target: aarch64-apple-darwin
             binary_name: susshi
-            asset_name: susshi-macos-arm64
-            build_tool: cargo
+            asset_name: susshi-macos-apple-silicon
             openssl_mode: system
-          # Windows support (optional, but good to have)
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             binary_name: susshi.exe
-            asset_name: susshi-windows-amd64.exe
-            build_tool: cargo
+            asset_name: susshi-windows-x86_64.exe
             openssl_mode: system
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target == 'x86_64-unknown-linux-gnu.2.17' && 'x86_64-unknown-linux-gnu' || matrix.target }}
+          targets: ${{ matrix.target }}
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
 
-      - name: Install tools for Linux compatibility builds
+      - name: Install Linux build deps
         if: startsWith(matrix.target, 'x86_64-unknown-linux-')
         shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools pkg-config libssl-dev
 
-      - name: Install OpenSSL for Windows
+      - name: Install OpenSSL (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
@@ -90,73 +93,25 @@ jobs:
           echo "OPENSSL_DIR=$opensslDir" >> $env:GITHUB_ENV
           echo "OPENSSL_NO_VENDOR=1" >> $env:GITHUB_ENV
 
-      - name: Setup Zig
-        if: matrix.build_tool == 'zigbuild'
-        uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.14.0
-
-      - name: Install cargo-zigbuild
-        if: matrix.build_tool == 'zigbuild'
-        shell: bash
-        run: cargo install cargo-zigbuild
-
-      - name: Build release (system OpenSSL)
+      - name: Build (system OpenSSL)
         if: matrix.openssl_mode == 'system'
         shell: bash
         env:
           OPENSSL_NO_VENDOR: "1"
-        run: |
-          if [ "${{ matrix.build_tool }}" = "zigbuild" ]; then
-            cargo zigbuild --release --target ${{ matrix.target }}
-          else
-            cargo build --release --target ${{ matrix.target }}
-          fi
+        run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Build release (vendored fallback)
+      - name: Build (vendored OpenSSL)
         if: matrix.openssl_mode == 'vendored'
         shell: bash
-        run: |
-          if [ "${{ matrix.build_tool }}" = "zigbuild" ]; then
-            cargo zigbuild --release --features openssl-vendored --target ${{ matrix.target }}
-          else
-            cargo build --release --features openssl-vendored --target ${{ matrix.target }}
-          fi
+        run: cargo build --release --features openssl-vendored --target ${{ matrix.target }}
 
-      - name: Check GLIBC compatibility for legacy artifact
-        if: matrix.target == 'x86_64-unknown-linux-gnu.2.17'
-        shell: bash
-        run: |
-          max_glibc=$(readelf --version-info target/x86_64-unknown-linux-gnu/release/${{ matrix.binary_name }} \
-            | grep -o 'GLIBC_[0-9.]*' \
-            | sort -V \
-            | tail -1)
-          echo "Max GLIBC required: ${max_glibc}"
-          if printf '%s\n' "GLIBC_2.17" "${max_glibc}" | sort -VC; then
-            echo "GLIBC requirement is within bounds (<= 2.17)"
-          else
-            echo "ERROR: binary requires ${max_glibc} which exceeds GLIBC_2.17"
-            exit 1
-          fi
-
-      - name: Prepare asset (Unix)
-        if: matrix.os != 'windows-latest'
-        shell: bash
-        run: |
-          TARGET_DIR="${{ matrix.target }}"
-          if [ "${{ matrix.build_tool }}" = "zigbuild" ]; then
-            TARGET_DIR="x86_64-unknown-linux-gnu"
-          fi
-          cp target/${TARGET_DIR}/release/${{ matrix.binary_name }} ${{ matrix.asset_name }}
-          chmod +x ${{ matrix.asset_name }}
-
-      - name: Prepare asset (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Copy binary to release asset name
         shell: bash
         run: |
           cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} ${{ matrix.asset_name }}
+          chmod +x ${{ matrix.asset_name }} || true
 
-      - name: Upload binaries to release
+      - name: Upload to GitHub Release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -165,11 +120,15 @@ jobs:
           tag: ${{ github.event.inputs.tag || github.ref }}
           overwrite: true
 
+  # ── DEB packages (amd64 + arm64) ─────────────────────────────────────────
+
   build-deb:
-    name: Build DEB packages
+    name: DEB packages
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
@@ -187,7 +146,7 @@ jobs:
           cargo install cargo-deb
           cargo install cross
 
-      - name: Install system OpenSSL toolchain (amd64 package)
+      - name: Install system OpenSSL (amd64)
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libssl-dev
@@ -199,18 +158,18 @@ jobs:
           cargo build --release --target x86_64-unknown-linux-gnu
           cargo deb --no-build --target x86_64-unknown-linux-gnu
 
-      - name: Build arm64 DEB (cross)
+      - name: Build arm64 DEB (cross-compiled)
         run: |
           cross build --release --features openssl-vendored --target aarch64-unknown-linux-gnu
           cargo deb --no-build --target aarch64-unknown-linux-gnu
 
-      - name: Smoke test DEB package (amd64)
+      - name: Smoke test (amd64)
         run: |
           sudo dpkg -i target/debian/susshi_*_amd64.deb
           susshi --version
           sudo dpkg -r susshi
 
-      - name: Upload DEBs to release
+      - name: Upload to GitHub Release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -219,12 +178,16 @@ jobs:
           tag: ${{ github.event.inputs.tag || github.ref }}
           overwrite: true
 
+  # ── RPM package (Fedora) ──────────────────────────────────────────────────
+
   build-rpm:
-    name: Build RPM package
+    name: RPM package
     runs-on: ubuntu-latest
     container: fedora:latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
@@ -232,10 +195,10 @@ jobs:
       - name: Install build dependencies
         run: dnf install -y rust cargo openssl-devel zlib-devel pkgconf-pkg-config rpm-build rpmdevtools git
 
-      - name: Setup rpmbuild tree
+      - name: Set up rpmbuild tree
         run: rpmdev-setuptree
 
-      - name: Patch version in spec
+      - name: Patch version in spec file
         run: |
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           VERSION="${TAG#v}"
@@ -245,12 +208,12 @@ jobs:
         run: spectool -g -R susshi.spec
 
       - name: Build RPM
-        run: rpmbuild -ba susshi.spec
         env:
           OPENSSL_NO_VENDOR: "1"
           LIBZ_SYS_USE_PKG_CONFIG: "1"
+        run: rpmbuild -ba susshi.spec
 
-      - name: Smoke test RPM package
+      - name: Smoke test
         shell: bash
         run: |
           shopt -s globstar
@@ -259,7 +222,7 @@ jobs:
           susshi --version
           rpm -e susshi
 
-      - name: Upload RPMs to release
+      - name: Upload to GitHub Release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -267,6 +230,8 @@ jobs:
           file_glob: true
           tag: ${{ github.event.inputs.tag || github.ref }}
           overwrite: true
+
+  # ── Arch Linux PKGBUILD (committed to repo) ───────────────────────────────
 
   update-pkgbuild:
     name: Update PKGBUILD in repo
@@ -276,9 +241,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout repository
+      - name: Checkout master
         uses: actions/checkout@v6
         with:
+          # PAT required so this push triggers aur-publish.yml.
+          # GITHUB_TOKEN pushes are silently ignored by workflow event triggers.
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
           ref: master
 

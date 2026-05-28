@@ -1,4 +1,10 @@
 [workspace]
+# Only open/update a release PR when at least one releasable commit is present.
+# Prevents the PKGBUILD bot-push (chore(release):) from triggering a spurious PR.
+release_commits = "^(feat|fix|perf|refactor)"
+# For 0.x crates, guarantee that feat: commits produce a minor bump (0.y → 0.y+1),
+# not a patch. Without this flag release-plz may default to patch on pre-1.0 packages.
+features_always_increment_minor = true
 # Automatically create/update the GitHub Release with the CHANGELOG section
 git_release_enable = true
 # Use the [Unreleased] section content as release notes
