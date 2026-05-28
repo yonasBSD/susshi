@@ -16,9 +16,9 @@ sed -i "s/^b2sums=(.*/b2sums=(${B2SUM})/" PKGBUILD
 
 echo "Updating PKGBUILD.bin to ${TAG}..."
 
-curl -fsSL "https://github.com/yatoub/susshi/releases/download/${TAG}/susshi-linux-amd64" \
-    -o /tmp/susshi-linux-amd64
-B2SUM_BIN=$(b2sum /tmp/susshi-linux-amd64 | cut -d' ' -f1)
+curl -fsSL "https://github.com/yatoub/susshi/releases/download/${TAG}/susshi-linux-x86_64" \
+    -o /tmp/susshi-linux-x86_64
+B2SUM_BIN=$(b2sum /tmp/susshi-linux-x86_64 | cut -d' ' -f1)
 
 sed -i "s/^pkgver=.*/pkgver=${VERSION}/" PKGBUILD.bin
 sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD.bin

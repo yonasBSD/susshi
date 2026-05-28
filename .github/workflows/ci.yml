@@ -33,6 +33,7 @@ jobs:
   preflight:
     name: Preflight
     runs-on: ubuntu-latest
+    permissions: {}
     outputs:
       skip: ${{ steps.gate.outputs.skip }}
     steps:
