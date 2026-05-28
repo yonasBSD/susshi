@@ -12,6 +12,8 @@ coverage:
         target: 70%
         threshold: 5%
 
+comment: false
+
 ignore:
   # UI rendering requires a live terminal — not unit-testable
   - "src/ui/**"
